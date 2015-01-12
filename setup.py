@@ -4,25 +4,24 @@
 # mkdir -p /opt/samba/share
 
 
-import os, commands, shutil
+import os, commands, subprocess
 import simplejson as json
 from pwd import getpwnam
 
 filename = "/tmp/usrpsswd.json"
 systempath = "/opt/samba"
 sambapath= "/opt/samba/share"
-sambaConfig = "/tmp/smb.cnf"
+sambaConfig = "/tmp/smb.conf"
 supervisorCnfFile="/supervisord.conf"
 
 def execute(cmd, msgtrue, msgfalse=None):
 
-    status, output = commands.getstatusoutput(cmd)
-
-    if status is 0:
-        print msgtrue
-    else:
-        raise RuntimeError(msgfalse + "\n" + output)
-
+    try:
+        status = subprocess.call(cmd)
+    except:
+        raise RuntimeError(msgfalse + "\n" + "Command: " + cmd)
+    print msgtrue
+    return status
 
 def main():
     os.mkdir(systempath)
@@ -34,11 +33,16 @@ def main():
 
     f.close()
 
-    ser = json.loads(config)
+    try:
+        ser = json.loads(config)
+    except:
+        raise RuntimeError("Please run the %s script to generate the configuration and re-build the container" + "\n")
 
-    command = "useradd -d /dev/null " + ser["user"]
+    command = ["useradd", "-d", "/dev/null ", ser["user"]]
 
-    command2 = "usermod --pass=%s %s " % (ser["password"], ser["user"])
+    command2 = ["usermod", " --pass=%s %s " % (ser["password"], ser["user"])]
+
+    command3 = [ 'smbpasswd', '-a', ser["user"], ser["password"]]
 
     execute(command, "user '%s' was correctly added" % ser["user"],
                      "user '%s' was **NOT** added" % ser["user"])
@@ -46,28 +50,12 @@ def main():
     execute(command2, "user '%s' password was correctly added" % ser["user"],
                       "Password for user '%s' was **NOT** added" % ser["user"] )
 
+    execute(command3, "Adding user %s to smb server complete successfully" % ser["user"],
+                      "Adding user %s to smb server **DID NOT** complete successfully" % ser["user"],)
+
     os.chown(sambapath, getpwnam(ser["user"]).pw_uid, getpwnam(ser["user"]).pw_gid)
 
     os.chmod(sambapath, 0770)
-
-    shutil.move(sambaConfig, '/etc/samba/smb.conf')
-
-    sprvrd = "[supervisord] \
-              nodaemon=true\
-              [program:smbd]\
-              command=/usr/sbin/smbd \
-              [program:smbd] \
-              command=/usr/sbin/nmbd"
-    print sprvrd
-
-    f = open(supervisorCnfFile, 'w')
-
-    f.write(sprvrd)
-
-    f.close()
-
-    execute("/usr/bin/supervisord -n -c " + supervisorCnfFile, "Cool", "Not Cool")
-
 
 if __name__ == "__main__":
     main()

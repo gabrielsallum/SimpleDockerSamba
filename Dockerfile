@@ -9,14 +9,16 @@ RUN apt-get -y install samba samba-common libcups2 python-minimal python-simplej
 
 
 ADD ./usrpsswd.json /tmp/usrpsswd.json
-ADD ./smb.cnf /tmp/smb.cnf
+ADD ./smb.conf /etc/samba/smb.conf
 ADD ./setup.py /tmp/setup.py
+ADD ./supervisord.conf /etc/supervisor/supervisord.conf
 
-EXPOSE  139 445
+EXPOSE  139 445 88
 
-CMD ["python", "/tmp/setup.py"]
-
-
+RUN python /tmp/setup.py
 
 
+CMD /usr/bin/supervisord -n
+
+#CMD /usr/sbin/smbd -F
 
