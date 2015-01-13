@@ -1,8 +1,5 @@
 #!/bin/python
 
-# mkdir -p /opt/samba
-# mkdir -p /opt/samba/share
-
 
 import os, commands, subprocess
 import simplejson as json
@@ -16,11 +13,16 @@ supervisorCnfFile="/supervisord.conf"
 
 def execute(cmd, msgtrue, msgfalse=None):
 
+    print "executing cmd : %s \n" %cmd
+
     try:
-        status = subprocess.call(cmd)
+        status, output = commands.getstatusoutput(cmd)
+        if status != 0:
+            raise RuntimeError("the external command has failed")
     except:
         raise RuntimeError(msgfalse + "\n" + "Command: " + cmd)
     print msgtrue
+
     return status
 
 def main():
@@ -36,22 +38,26 @@ def main():
     try:
         ser = json.loads(config)
     except:
-        raise RuntimeError("Please run the %s script to generate the configuration and re-build the container" + "\n")
+        raise RuntimeError("Please run the setup.py script to generate the configuration and re-build the container" + "\n")
 
-    command = ["useradd", "-d", "/dev/null ", ser["user"]]
+    command = "useradd -d /dev/null -G sambashare -p %s " + ser["user"]
 
-    command2 = ["usermod", " --pass=%s %s " % (ser["password"], ser["user"])]
-
-    command3 = [ 'smbpasswd', '-a', ser["user"], ser["password"]]
+    #command2 = 'smbpasswd -a %s' % ser["user"]
 
     execute(command, "user '%s' was correctly added" % ser["user"],
                      "user '%s' was **NOT** added" % ser["user"])
 
-    execute(command2, "user '%s' password was correctly added" % ser["user"],
-                      "Password for user '%s' was **NOT** added" % ser["user"] )
+    #execute(command2, "Adding user %s to smb server complete successfully" % ser["user"]
+    #    "Adding user %s to smb server **DID NOT** complete successfully" % ser["user"],)
 
-    execute(command3, "Adding user %s to smb server complete successfully" % ser["user"],
-                      "Adding user %s to smb server **DID NOT** complete successfully" % ser["user"],)
+
+    p1 = subprocess.Popen(["echo", "-e", ser["password"]])
+
+    p2 = subprocess.Popen(["echo", "-e", ser["password"]], stdin=p1.stdout)
+
+    p3 = subprocess.Popen(['smbpasswd', '-s', '-a', ser["user"]], stdin=p2.stdout, stdout=subprocess.PIPE)
+
+    print "** " + p3.communicate()[0]
 
     os.chown(sambapath, getpwnam(ser["user"]).pw_uid, getpwnam(ser["user"]).pw_gid)
 
